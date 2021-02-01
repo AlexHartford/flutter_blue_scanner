@@ -1,90 +1,363 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_blue/flutter_blue.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/all.dart';
 
 void main() {
-  runApp(MyApp());
+  runApp(
+    ProviderScope(
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'BLE Test',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      home: ScanPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
-  final String title;
+final bluetooth = Provider<FlutterBlue>((_) => FlutterBlue.instance);
 
-  @override
-  _MyHomePageState createState() => _MyHomePageState();
-}
+final connectedDevices = FutureProvider.autoDispose<List<BluetoothDevice>>(
+  (ref) => ref.watch(bluetooth).connectedDevices,
+);
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class Scanning extends StateNotifier<bool> {
+  final Reader _read;
 
-  void _incrementCounter() {
-    setState(() {
-      _counter++;
+  Scanning(this._read) : super(false) {
+    _read(bluetooth).isScanning.listen((bool scanning) {
+      state = scanning;
     });
   }
+}
 
+final scannedDevices = StreamProvider<List<BluetoothDevice>>(
+  (ref) => ref.watch(bluetooth).scanResults.map(
+        (results) => results
+            .map((result) => result.device)
+            .where((device) => device.name.isNotEmpty)
+            .toList(),
+      ),
+);
+
+// final _scanning = StreamProvider<bool>((ref) => ref.watch(bluetooth).isScanning);
+final scanning = StateNotifierProvider<Scanning>((ref) => Scanning(ref.read));
+
+class ScanPage extends HookWidget {
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: Text('Bluetooth'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: ListView(
+          children: [
+            ConnectedDevicesSection(),
+            ScannedDevicesSection(),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+        onPressed: () async => context.read(scanning.state)
+            ? await context.read(bluetooth).stopScan()
+            : await context.read(bluetooth).startScan(),
+        child: Icon(useProvider(scanning.state) ? Icons.bluetooth_searching : Icons.bluetooth_disabled),
+      ),
+    );
+  }
+}
+
+class ConnectedDevicesSection extends HookWidget {
+  const ConnectedDevicesSection({Key key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ListTile(
+          title: Text('Connected Devices'),
+        ),
+        useProvider(connectedDevices).when(
+          data: (devices) => ListView.builder(
+            shrinkWrap: true,
+            physics: ClampingScrollPhysics(),
+            itemCount: devices.length,
+            itemBuilder: (_, index) => Card(
+              color: devices[index].name == '01136B' ? Colors.blue[100] : null,
+              child: ListTile(
+                title: Text('${devices[index].name}\n${devices[index].id}'),
+                onTap: () {
+                  context.read(connectedDevice).state = devices[index];
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => DevicePage()));
+                },
+              ),
+            ),
+          ),
+          loading: () => const Center(
+            child: CircularProgressIndicator(),
+          ),
+          error: (err, stack) => Text(
+            err.toString(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class ScannedDevicesSection extends HookWidget {
+  const ScannedDevicesSection({Key key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ListTile(
+          title: Text('Scanned Devices'),
+        ),
+        useProvider(scannedDevices).when(
+          data: (devices) {
+            return ListView.builder(
+              shrinkWrap: true,
+              physics: ClampingScrollPhysics(),
+              itemCount: devices.length,
+              itemBuilder: (_, index) => Card(
+                color: devices[index].name == '01136B' ? Colors.blue[100] : null,
+                child: ListTile(
+                  title: Text('${devices[index].name}\n${devices[index].id}'),
+                  trailing: FlatButton(
+                    color: Colors.blue,
+                    child: Text(
+                      'CONNECT',
+                      style: TextStyle(
+                        color: Colors.white,
+                      ),
+                    ),
+                    onPressed: () async {
+                      try {
+                        await devices[index].connect();
+                        context.read(connectedDevice).state = devices[index];
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => DevicePage()));
+                      } on PlatformException catch (e) {
+                        if (e.code != 'already_connected') {
+                          throw e;
+                        }
+                        context.read(connectedDevice).state = devices[index];
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => DevicePage()));
+                      } catch (e) {
+                        print('Error connecting: $e');
+                      }
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+          loading: () => const Center(
+            child: CircularProgressIndicator(),
+          ),
+          error: (err, stack) => Text(
+            err.toString(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+final connectedDevice = StateProvider<BluetoothDevice>((_) => null);
+
+final services = FutureProvider<List<BluetoothService>>(
+  (ref) => ref.watch(connectedDevice).state.discoverServices(),
+);
+
+class DevicePage extends HookWidget {
+  const DevicePage({Key key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final device = useProvider(connectedDevice).state;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(device.name),
+        actions: [
+          FlatButton(
+            onPressed: () async {
+              await device.disconnect();
+              Navigator.of(context).pop();
+            },
+            child: Text(
+              'DISCONNECT',
+              style: TextStyle(
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: ListView(
+        children: [
+          ListTile(
+            title: Text('Services'),
+          ),
+          useProvider(services).when(
+            data: (services) {
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: ClampingScrollPhysics(),
+                itemCount: services.length,
+                itemBuilder: (_, index) => Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        title: Text('${services[index].uuid}'),
+                        subtitle: Text(
+                          '${services[index].characteristics.length.toString()} characteristic(s)',
+                        ),
+                      ),
+                      ...List.generate(
+                        services[index].characteristics.length,
+                        (i) => CharacteristicInfo(services[index].characteristics[i], i),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+            loading: () => const Center(
+              child: CircularProgressIndicator(),
+            ),
+            error: (err, stack) => Text(
+              err.toString(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final characteristicValue =
+    StreamProvider.autoDispose.family<List<int>, BluetoothCharacteristic>((ref, char) {
+  return char.value;
+});
+
+class CharacteristicInfo extends HookWidget {
+  CharacteristicInfo(this.char, int index, {Key key})
+      : this.color = Colors.blue[index > 0 ? index * 100 : 50],
+        super(key: key);
+
+  final BluetoothCharacteristic char;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    char.value.listen((value) {
+      print('char value: $value');
+    });
+    return useProvider(characteristicValue(char)).when(
+      data: (data) {
+        return ListTile(
+          tileColor: color,
+          title: Text(
+            data.toString(),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          subtitle: CharButtons(char),
+        );
+      },
+      loading: () => const Center(
+        child: CircularProgressIndicator(),
+      ),
+      error: (err, stack) => Text(
+        err.toString(),
+      ),
+    );
+  }
+}
+
+class CharButtons extends HookWidget {
+  const CharButtons(this.char, {Key key}) : super(key: key);
+
+  final BluetoothCharacteristic char;
+
+  @override
+  Widget build(BuildContext context) {
+    List<ButtonTheme> buttons = new List<ButtonTheme>();
+
+    if (char.properties.read) {
+      buttons.add(
+        ButtonTheme(
+          minWidth: 10,
+          height: 20,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: RaisedButton(
+              color: Colors.amber[800],
+              child: Text('READ', style: TextStyle(color: Colors.white)),
+              onPressed: () async {
+                await char.read();
+              },
+            ),
+          ),
+        ),
+      );
+    }
+    if (char.properties.write) {
+      buttons.add(
+        ButtonTheme(
+          minWidth: 10,
+          height: 20,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: RaisedButton(
+              color: Colors.deepOrange,
+              child: Text('WRITE', style: TextStyle(color: Colors.white)),
+              onPressed: () async {
+                // await char.write(value)
+              },
+            ),
+          ),
+        ),
+      );
+    }
+    if (char.properties.notify) {
+      buttons.add(
+        ButtonTheme(
+          minWidth: 10,
+          height: 20,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: RaisedButton(
+              color: Colors.red,
+              child: Text('NOTIFY', style: TextStyle(color: Colors.white)),
+              onPressed: () async {
+                await char.setNotifyValue(!char.isNotifying);
+              },
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: buttons,
     );
   }
 }

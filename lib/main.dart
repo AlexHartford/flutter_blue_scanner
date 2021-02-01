@@ -51,7 +51,6 @@ final scannedDevices = StreamProvider<List<BluetoothDevice>>(
       ),
 );
 
-// final _scanning = StreamProvider<bool>((ref) => ref.watch(bluetooth).isScanning);
 final scanning = StateNotifierProvider<Scanning>((ref) => Scanning(ref.read));
 
 class ScanPage extends HookWidget {

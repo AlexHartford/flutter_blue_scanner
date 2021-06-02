@@ -135,7 +135,8 @@ class ScannedDevicesSection extends HookWidget {
               physics: ClampingScrollPhysics(),
               itemCount: devices.length,
               itemBuilder: (_, index) => Card(
-                color: devices[index].name == '01136B' ? Colors.blue[100] : null,
+                // color: devices[index].name == '01136B' ? Colors.blue[100] : null,
+                color: devices[index].name == '180A' ? Colors.blue[100] : null,
                 child: ListTile(
                   title: Text('${devices[index].name}\n${devices[index].id}'),
                   trailing: TextButton(

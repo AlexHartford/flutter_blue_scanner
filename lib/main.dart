@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:hooks_riverpod/all.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 void main() {
   runApp(
@@ -28,7 +28,8 @@ class MyApp extends StatelessWidget {
 
 final bluetooth = Provider<FlutterBlue>((_) => FlutterBlue.instance);
 
-final connectedDevices = FutureProvider.autoDispose<List<BluetoothDevice>>(
+final AutoDisposeFutureProvider<List<BluetoothDevice>>? connectedDevices =
+    FutureProvider.autoDispose<List<BluetoothDevice>>(
   (ref) => ref.watch(bluetooth).connectedDevices,
 );
 
@@ -51,7 +52,7 @@ final scannedDevices = StreamProvider<List<BluetoothDevice>>(
       ),
 );
 
-final scanning = StateNotifierProvider<Scanning>((ref) => Scanning(ref.read));
+final scanning = StateNotifierProvider<Scanning, bool>((ref) => Scanning(ref.read));
 
 class ScanPage extends HookWidget {
   @override
@@ -70,17 +71,17 @@ class ScanPage extends HookWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () async => context.read(scanning.state)
+        onPressed: () async => context.read(scanning)
             ? await context.read(bluetooth).stopScan()
             : await context.read(bluetooth).startScan(),
-        child: Icon(useProvider(scanning.state) ? Icons.bluetooth_searching : Icons.bluetooth_disabled),
+        child: Icon(useProvider(scanning) ? Icons.bluetooth_searching : Icons.bluetooth_disabled),
       ),
     );
   }
 }
 
 class ConnectedDevicesSection extends HookWidget {
-  const ConnectedDevicesSection({Key key}) : super(key: key);
+  const ConnectedDevicesSection({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +90,7 @@ class ConnectedDevicesSection extends HookWidget {
         ListTile(
           title: Text('Connected Devices'),
         ),
-        useProvider(connectedDevices).when(
+        useProvider(connectedDevices!).when(
           data: (devices) => ListView.builder(
             shrinkWrap: true,
             physics: ClampingScrollPhysics(),
@@ -118,7 +119,7 @@ class ConnectedDevicesSection extends HookWidget {
 }
 
 class ScannedDevicesSection extends HookWidget {
-  const ScannedDevicesSection({Key key}) : super(key: key);
+  const ScannedDevicesSection({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -137,8 +138,8 @@ class ScannedDevicesSection extends HookWidget {
                 color: devices[index].name == '01136B' ? Colors.blue[100] : null,
                 child: ListTile(
                   title: Text('${devices[index].name}\n${devices[index].id}'),
-                  trailing: FlatButton(
-                    color: Colors.blue,
+                  trailing: TextButton(
+                    style: TextButton.styleFrom(primary: Colors.blue),
                     child: Text(
                       'CONNECT',
                       style: TextStyle(
@@ -177,24 +178,24 @@ class ScannedDevicesSection extends HookWidget {
   }
 }
 
-final connectedDevice = StateProvider<BluetoothDevice>((_) => null);
+final connectedDevice = StateProvider<BluetoothDevice?>((_) => null);
 
 final services = FutureProvider<List<BluetoothService>>(
-  (ref) => ref.watch(connectedDevice).state.discoverServices(),
+  (ref) => ref.watch(connectedDevice).state!.discoverServices(),
 );
 
 class DevicePage extends HookWidget {
-  const DevicePage({Key key}) : super(key: key);
+  const DevicePage({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final device = useProvider(connectedDevice).state;
+    final device = useProvider(connectedDevice).state!;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(device.name),
         actions: [
-          FlatButton(
+          TextButton(
             onPressed: () async {
               await device.disconnect();
               Navigator.of(context).pop();
@@ -250,25 +251,25 @@ class DevicePage extends HookWidget {
   }
 }
 
-final characteristicValue =
+final AutoDisposeStreamProviderFamily<List<int>, BluetoothCharacteristic>? characteristicValue =
     StreamProvider.autoDispose.family<List<int>, BluetoothCharacteristic>((ref, char) {
   return char.value;
 });
 
 class CharacteristicInfo extends HookWidget {
-  CharacteristicInfo(this.char, int index, {Key key})
+  CharacteristicInfo(this.char, int index, {Key? key})
       : this.color = Colors.blue[index > 0 ? index * 100 : 50],
         super(key: key);
 
   final BluetoothCharacteristic char;
-  final Color color;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     char.value.listen((value) {
       print('char value: $value');
     });
-    return useProvider(characteristicValue(char)).when(
+    return useProvider(characteristicValue!(char)).when(
       data: (data) {
         return ListTile(
           tileColor: color,
@@ -292,13 +293,13 @@ class CharacteristicInfo extends HookWidget {
 }
 
 class CharButtons extends HookWidget {
-  const CharButtons(this.char, {Key key}) : super(key: key);
+  const CharButtons(this.char, {Key? key}) : super(key: key);
 
   final BluetoothCharacteristic char;
 
   @override
   Widget build(BuildContext context) {
-    List<ButtonTheme> buttons = new List<ButtonTheme>();
+    List<ButtonTheme> buttons = [];
 
     if (char.properties.read) {
       buttons.add(
@@ -307,8 +308,8 @@ class CharButtons extends HookWidget {
           height: 20,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: RaisedButton(
-              color: Colors.amber[800],
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(primary: Colors.amber[800]),
               child: Text('READ', style: TextStyle(color: Colors.white)),
               onPressed: () async {
                 await char.read();
@@ -325,8 +326,8 @@ class CharButtons extends HookWidget {
           height: 20,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: RaisedButton(
-              color: Colors.deepOrange,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(primary: Colors.deepOrange),
               child: Text('WRITE', style: TextStyle(color: Colors.white)),
               onPressed: () async {
                 // await char.write(value)
@@ -343,8 +344,8 @@ class CharButtons extends HookWidget {
           height: 20,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: RaisedButton(
-              color: Colors.red,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(primary: Colors.red),
               child: Text('NOTIFY', style: TextStyle(color: Colors.white)),
               onPressed: () async {
                 await char.setNotifyValue(!char.isNotifying);

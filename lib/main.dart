@@ -1,3 +1,4 @@
+import 'package:ble_test/uuidmap.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue/flutter_blue.dart';
@@ -225,7 +226,7 @@ class DevicePage extends HookWidget {
                   child: Column(
                     children: [
                       ListTile(
-                        title: Text('${services[index].uuid}'),
+                        title: Text(uuidMap[services[index].uuid] ?? '${services[index].uuid}'),
                         subtitle: Text(
                           '${services[index].characteristics.length.toString()} characteristic(s)',
                         ),
@@ -275,7 +276,7 @@ class CharacteristicInfo extends HookWidget {
         return ListTile(
           tileColor: color,
           title: Text(
-            data.toString(),
+            '${uuidMap[char.uuid.toString()] ?? char.uuid.toString()} - ${data.toString()}',
             style: TextStyle(
               fontWeight: FontWeight.w600,
             ),

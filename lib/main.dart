@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:ble_test/uuidmap.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:convert/convert.dart';
 
 void main() {
   runApp(
@@ -137,11 +140,11 @@ class ScannedDevicesSection extends HookWidget {
               itemCount: devices.length,
               itemBuilder: (_, index) => Card(
                 // color: devices[index].name == '01136B' ? Colors.blue[100] : null,
-                color: devices[index].name == '180A' ? Colors.blue[100] : null,
+                color: devices[index].name == 'SudoBoard' ? Colors.blue[100] : null,
                 child: ListTile(
                   title: Text('${devices[index].name}\n${devices[index].id}'),
-                  trailing: TextButton(
-                    style: TextButton.styleFrom(primary: Colors.blue),
+                  trailing: ElevatedButton(
+                    style: ElevatedButton.styleFrom(primary: Colors.blue),
                     child: Text(
                       'CONNECT',
                       style: TextStyle(
@@ -226,7 +229,8 @@ class DevicePage extends HookWidget {
                   child: Column(
                     children: [
                       ListTile(
-                        title: Text(uuidMap[services[index].uuid] ?? '${services[index].uuid}'),
+                        title: Text(
+                            uuidMap[services[index].uuid.toString()] ?? '${services[index].uuid}'),
                         subtitle: Text(
                           '${services[index].characteristics.length.toString()} characteristic(s)',
                         ),
@@ -273,10 +277,11 @@ class CharacteristicInfo extends HookWidget {
     });
     return useProvider(characteristicValue!(char)).when(
       data: (data) {
+        final decoded = Utf8Decoder().convert(data);
         return ListTile(
           tileColor: color,
           title: Text(
-            '${uuidMap[char.uuid.toString()] ?? char.uuid.toString()} - ${data.toString()}',
+            '${uuidMap[char.uuid.toString()] ?? char.uuid.toString()} - $decoded',
             style: TextStyle(
               fontWeight: FontWeight.w600,
             ),
@@ -332,7 +337,8 @@ class CharButtons extends HookWidget {
               style: ElevatedButton.styleFrom(primary: Colors.deepOrange),
               child: Text('WRITE', style: TextStyle(color: Colors.white)),
               onPressed: () async {
-                // await char.write(value)
+                final encoded = Utf8Encoder().convert('06-04-2021');
+                await char.write(encoded);
               },
             ),
           ),

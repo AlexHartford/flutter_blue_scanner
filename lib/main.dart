@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:convert/convert.dart';
 
 void main() {
   runApp(
@@ -337,8 +336,10 @@ class CharButtons extends HookWidget {
               style: ElevatedButton.styleFrom(primary: Colors.deepOrange),
               child: Text('WRITE', style: TextStyle(color: Colors.white)),
               onPressed: () async {
-                final encoded = Utf8Encoder().convert('06-04-2021');
-                await char.write(encoded);
+                await showModalBottomSheet(
+                  context: context,
+                  builder: (_) => WriteToDeviceBottomSheet(char: char),
+                );
               },
             ),
           ),
@@ -366,6 +367,53 @@ class CharButtons extends HookWidget {
 
     return Row(
       children: buttons,
+    );
+  }
+}
+
+class WriteToDeviceBottomSheet extends HookWidget {
+  const WriteToDeviceBottomSheet({
+    Key? key,
+    required this.char,
+  }) : super(key: key);
+
+  final BluetoothCharacteristic char;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = useTextEditingController();
+
+    return Container(
+      padding: MediaQuery.of(context).viewInsets,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: controller,
+            autofocus: true,
+          ),
+          SizedBox(height: 32),
+          Row(
+            children: [
+              Spacer(),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel'),
+              ),
+              SizedBox(width: 16),
+              ElevatedButton(
+                onPressed: () async {
+                  final encoded = Utf8Encoder().convert(controller.text);
+                  await char.write(encoded);
+                  Navigator.pop(context);
+                },
+                child: Text('Write'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
